@@ -145,6 +145,76 @@ Note: The original data was built around PostgreSQL, but was swapped to fit MySQ
 
 ## Cleaned Dataset:
 
+### Cleaned version of customer_orders:
+
+In this table, we remove all the blank spaces and replace all stringed (null/NaN) values as a NULL value for constistency. 
+
+** **
+	CREATE TEMPORARY TABLE cust_orders
+	  SELECT
+		order_id,
+		customer_id, 
+		pizza_id, 
+		CASE
+		    	WHEN exclusions = '' THEN NULL
+			WHEN exclusions = 'null' THEN NULL
+		ELSE exclusions
+		END AS exclusions_cleaned,
+		CASE
+			WHEN extras = '' THEN null
+			WHEN extras = 'NaN' THEN null
+		ELSE extras
+		END AS extras_cleaned,
+		order_time
+	  FROM customer_orders;
+
+### Cleaned version of runner_orders:
+
+This table is used to prime the existing data and remove the text from the stringed numerical values.
+>
+To provide context, we change the names to include the the measurements of the values.
+
+** **
+	CREATE TEMPORARY TABLE runner_orders_pre
+	SELECT
+		order_id,
+		runner_id,
+		CASE
+			WHEN pickup_time = 'null' THEN null
+			ELSE pickup_time
+		END AS pick_up_time,
+		CASE
+			WHEN distance = 'null' THEN null
+			ELSE regexp_replace(distance, '[a-z]+', '')
+		END AS distance_km,
+		CASE
+			WHEN duration = 'null' THEN null
+			ELSE regexp_replace(duration, '[a-z]+', '')
+			END AS duration_mins,
+		CASE
+			WHEN cancellation = '' THEN null
+			WHEN cancellation = 'null' THEN null
+			ELSE cancellation
+			END AS cancellation               
+	FROM runner_orders;
+
+From here, we change the data type of the stringed numbers to decimals or integers to enable numerical functions and aggregation capabilities.
+
+** **
+	CREATE TEMPORARY TABLE runner_orders_post
+		SELECT
+			order_id,
+			runner_id,
+			pick_up_time,
+			CAST(distance_km AS DECIMAL(3,1)) AS distance_km, 
+			CAST(duration_mins AS SIGNED INT) AS duration_mins,
+			cancellation
+	    FROM runner_orders_pre;
+
+<div id='clean_data_python'/>
+
+#### (Optional) Cleaned version of pizza_recipes
+
 Note: The Pizza_Recipes dataset originally contained comma-separated-values within the toppings column by pizza_id.
 
 #### The Thought Process:
@@ -172,87 +242,10 @@ Although the third approach could work, I figured it would be good practice and 
 Found that Pandas had a function called EXPLODE() that did exactly what cross apply + string split would have done in SQL Server.
 Called this table clean_pizza_recipes and this was the table used for the queries in section C.
 
-### Cleaned version of customer_orders:
-
-In this table, we remove all the blank spaces and replace all stringed (null/NaN) values as a NULL value for constistency. 
-
-** **
-	CREATE TEMPORARY TABLE cust_orders
-	  SELECT
-		order_id, 
-		customer_id, 
-		pizza_id, 
-		CASE
-		    WHEN exclusions = '' THEN NULL
-			WHEN exclusions = 'null' THEN NULL
-		ELSE exclusions
-		END AS exclusions_cleaned,
-		CASE
-			WHEN extras = '' THEN null
-			WHEN extras = 'NaN' THEN null
-		ELSE extras
-		END AS extras_cleaned,
-		order_time
-	  FROM customer_orders;
-
-### Cleaned version of runner_orders:
-
-This table is used to prime the existing data and remove the text from the stringed numerical values.
->
-To provide context, we change the names to include the the measurements of the values.
-
-** **
-	CREATE TEMPORARY TABLE runner_orders_pre
-	SELECT
-		order_id,
-	    runner_id,
-	    CASE
-		WHEN pickup_time = 'null' THEN null
-		ELSE pickup_time
-	    END AS pick_up_time,
-		CASE
-		WHEN distance = 'null' THEN null
-		ELSE regexp_replace(distance, '[a-z]+', '')
-	    END AS distance_km,
-	    CASE
-		WHEN duration = 'null' THEN null
-		ELSE regexp_replace(duration, '[a-z]+', '')
-		END AS duration_mins,
-	    CASE
-		WHEN cancellation = '' THEN null
-		WHEN cancellation = 'null' THEN null
-		ELSE cancellation
-		END AS cancellation               
-	FROM runner_orders;
-
-From here, we change the data type of the stringed numbers to decimals or integers to enable numerical functions and aggregation capabilities.
-
-** **
-	CREATE TEMPORARY TABLE runner_orders_post
-		SELECT
-		order_id,
-		runner_id,
-		pick_up_time,
-		CAST(distance_km AS DECIMAL(3,1)) AS distance_km, 
-		CAST(duration_mins AS SIGNED INT) AS duration_mins,
-		cancellation
-	    FROM runner_orders_pre;
-
-<div id='clean_data_python'/>
-
-#### (Optional) Cleaned version of pizza_recipes
-
-The way the data in this table is set up has the toppings being comprised of multiple values as a list per row.
-This approach is not recommended as it is difficult to navigate or query without complicated means.
-
-Found that a possible way to traverse is by using 'FIND_IN_SET', but that has its own limitations, as indexing cannot be used, thus limiting usability in larger data sets.
-
-The best way to approach was to create a separate table with one value per id and changing the designated primary key of the pizza_id into a foreign key to house multiple ids and toppings.
-While there were solutions available in SQL to perform this method, it was FAR easier to do so in Python (Pandas) using the explode function.
 
 Future reference: https://stackoverflow.com/questions/12680754/split-explode-pandas-dataframe-string-entry-to-separate-rows
 
-##### Exported the table into a CSV to load into Jupyter.
+#### Exported the table into a CSV to load into Jupyter.
 
 ** **
 
@@ -262,13 +255,15 @@ Future reference: https://stackoverflow.com/questions/12680754/split-explode-pan
     pizza = pd.read_csv('pizza_recipe_copy.csv')
 
 ** = kwargs
+>
 toppings is the column name of the multi-value list
+>
 Here we are assigning an object key-value pair for the topping name = topping values separated by the comma delimiter
 
 ** **
     x = pizza.assign(**('toppings' : pizza['toppings'].str.split(',')))
 
-##### Here is how it looks after assigning.
+#### Here is how it looks after assigning.
 
 ** **
     x
@@ -278,12 +273,12 @@ Here we are assigning an object key-value pair for the topping name = topping va
 | 1           | [1, 2, 3, 4, 5, 6, 8, 10] |
 | 2           | [4, 6, 7, 9, 11, 12]      |
 
-##### We then use the explode method to separate each pair into separate rows
+#### We then use the explode method to separate each pair into separate rows
 
 ** **
     x_clean = x.explode('toppings')
 
-##### This is how it looks post explode.
+#### This is how it looks post explode.
 
 ** **
     x_clean['toppings']
@@ -305,7 +300,7 @@ Here we are assigning an object key-value pair for the topping name = topping va
 | 2        | 11       |
 | 2        | 12       |
 
-##### In order to utilize this data, we create a new and updated CSV to import into the MySQL database.
+#### In order to utilize this data, we create a new and updated CSV to import into the MySQL database.
 
 ** **
     x_clean.to_csv('clean_ingredients.csv')
@@ -313,11 +308,11 @@ Here we are assigning an object key-value pair for the topping name = topping va
 
 <div id='diagram'/>
 
-Entity Relationship Diagram View
+## Entity Relationship Diagram View
 
 Original image source: 
 https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_medium=bottom_open
-
+>
 ![image](https://github.com/TheCaptainFalcon/8wksql-cs2/blob/master/ERD-CS2.JPG)
 
 <div id='questions'/>
@@ -378,7 +373,7 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
 
     WITH pizza_counter AS (  
     SELECT
-    	c.order_id,
+        c.order_id,
         COUNT(c.pizza_id) AS pizza_count 
     FROM cust_orders c
     LEFT JOIN runner_orders_post r 
@@ -440,7 +435,7 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
 **Query #6**
 
     SELECT
-    	order_id,
+        order_id,
         COUNT(pizza_id) AS total_pizzas
     FROM customer_orders
     GROUP BY order_id
@@ -466,15 +461,15 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
 **Query #7**
 
     WITH pizza_changes_counter AS (
-    SELECT
+    SELECT 
         co.customer_id,
         CASE 
-        	WHEN co.exclusions_cleaned LIKE '%' OR co.extras_cleaned LIKE '%' THEN 1
+            WHEN co.exclusions_cleaned LIKE '%' OR co.extras_cleaned LIKE '%' THEN 1
             ELSE 0
         END AS pizza_change_count,
         CASE
-      	    WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned IS NULL THEN 1
-      		WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned = 'NaN' THEN 1
+            WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned IS NULL THEN 1
+            WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned = 'NaN' THEN 1
             ELSE 0
         END AS pizza_no_change_count
     FROM cust_orders co
@@ -485,7 +480,7 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
       
     SELECT
         customer_id,
-      	SUM(pizza_change_count) AS total_pizzas_with_changes,
+        SUM(pizza_change_count) AS total_pizzas_with_changes,
         SUM(pizza_no_change_count) AS total_pizzas_without_changes
     FROM pizza_changes_counter
     GROUP BY customer_id;
@@ -573,13 +568,13 @@ Normally, the answer would be 2, but because the question specified 'delivered',
     SELECT	
     	order_count,
         CASE 
-        	WHEN day = 0 THEN 'Monday'
+		WHEN day = 0 THEN 'Monday'
     		WHEN day = 1 THEN 'Tuesday'
-            WHEN day = 2 THEN 'Wednesday'
-            WHEN day = 3 THEN 'Thursday'
-            WHEN day = 4 THEN 'Friday'
-            WHEN day = 5 THEN 'Saturday'
-            WHEN day = 6 THEN 'Sunday'
+		WHEN day = 2 THEN 'Wednesday'
+		WHEN day = 3 THEN 'Thursday'
+		WHEN day = 4 THEN 'Friday'
+		WHEN day = 5 THEN 'Saturday'
+		WHEN day = 6 THEN 'Sunday'
        END AS day
     FROM orders_by_day;
 
@@ -637,6 +632,7 @@ Note: TIMEDIFF(later time, earlier time)
 #### 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
 
 Based on the limited data, there is a possible relationship. 
+
 As the number of pizzas increases per order, the time to prepare an order increases. 
 This is shown with order 4 with customer id 103 ranking at the highest in time prep of 29 mins. 
 There seems to be a slight variance with orders consisting of 2 pizzas taking anywhere from 15 - 21 mins, while an order of 1 pizza takes as short as 10 minutes.
@@ -694,8 +690,10 @@ There seems to be a slight variance with orders consisting of 2 pizzas taking an
 | 2         | 23.93333         | 26.6667            |
 | 3         | 10.00000         | 15.0000            |
 
-PART 2 ANSWER: 
+#### PART 2 ANSWER: 
+
 Yes, as expected. 
+>
 As the distance increases, the time it takes to deliver an order, increases as well.
 
 ---
@@ -708,11 +706,11 @@ As the distance increases, the time it takes to deliver an order, increases as w
     	runner_id,
         CASE
         	WHEN cancellation IS NULL OR cancellation = 'NaN' THEN 1
-            ELSE 0
+		ELSE 0
         END AS no_cancellation_count,
         CASE
         	WHEN cancellation IS NOT NULL OR cancellation != 'NaN' THEN 1
-            ELSE 0
+		ELSE 0
         END AS cancellation_count
     FROM runner_orders_post
     )
@@ -749,7 +747,9 @@ In addition, taking into consideration a real life scenario and the concept of f
 
 **Query #1**
 
-    SELECT pizza_id, topping_name
+    SELECT 
+    	pizza_id, 
+	topping_name
     FROM clean_pizza_recipes cpr
     LEFT JOIN pizza_toppings pt 
         ON cpr.toppings = pt.topping_id;
@@ -771,8 +771,10 @@ In addition, taking into consideration a real life scenario and the concept of f
 | 2        | Tomatoes     |
 | 2        | Tomato Sauce |
 
-#### ANSWER: 
+#### ANSWER:
+
 Pizza 1 (Meatlovers) = [Bacon, BBQ Sauce, Beef, Cheese, Chicken, Mushrooms, Pepperoni, Salami]
+>
 Pizza 2 (Vegetarian) = [Cheese, Mushrooms, Onions, Peppers, Tomatoes, Tomato Sauce]
 
 ---
@@ -816,7 +818,7 @@ Pizza 2 (Vegetarian) = [Cheese, Mushrooms, Onions, Peppers, Tomatoes, Tomato Sau
 
 #### 4. Generate an order item for each record in the customers_orders table in the format of one of the following:
 
-##### Meat Lovers
+#### Meat Lovers
 
 ** **
 
@@ -838,7 +840,7 @@ Pizza 2 (Vegetarian) = [Cheese, Mushrooms, Onions, Peppers, Tomatoes, Tomato Sau
 
 ---
 
-##### Meat Lovers - Exclude Beef
+#### Meat Lovers - Exclude Beef
 
 ** **
 
@@ -849,7 +851,7 @@ Pizza 2 (Vegetarian) = [Cheese, Mushrooms, Onions, Peppers, Tomatoes, Tomato Sau
 
 Note: There is no query result, as the dataset does not have any existing exclusions with Beef (3), oddly enough.
 
-##### Meat Lovers - Extra Bacon
+#### Meat Lovers - Extra Bacon
 
 ** **
 
@@ -867,7 +869,7 @@ Note: There is no query result, as the dataset does not have any existing exclus
 
 ---
 
-##### Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
+#### Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
 
 ** **
 
@@ -876,7 +878,7 @@ Note: There is no query result, as the dataset does not have any existing exclus
     	order_id,
         CASE
     		WHEN exclusions_cleaned IN (1,4) OR exclusions_cleaned LIKE '%1%' OR exclusions_cleaned LIKE '%4%' THEN 1
-            WHEN extras_cleaned IN (6,9) AND extras_cleaned LIKE '%6%' OR extras_cleaned LIKE '%9%' THEN 1
+		WHEN extras_cleaned IN (6,9) AND extras_cleaned LIKE '%6%' OR extras_cleaned LIKE '%9%' THEN 1
     	END AS exc_ext_count
     FROM cust_orders
     WHERE pizza_id = 1
@@ -905,12 +907,12 @@ It is also worth noting, that while this would not work if there were more than 
 
     WITH exc_ext_bool AS (
     	SELECT
-    		order_id,
-            pizza_id,
-            exclusions_cleaned,
-            extras_cleaned,
-    		IF(LOCATE(',', exclusions_cleaned), TRUE, FALSE) AS exclusions_bool,
-            IF(LOCATE(',', extras_cleaned), TRUE, FALSE) AS extras_bool 
+		order_id,
+		pizza_id,
+		exclusions_cleaned,
+		extras_cleaned,
+		IF(LOCATE(',', exclusions_cleaned), TRUE, FALSE) AS exclusions_bool,
+		IF(LOCATE(',', extras_cleaned), TRUE, FALSE) AS extras_bool 
     	FROM cust_orders
     ),
 
@@ -934,15 +936,18 @@ It is also worth noting, that while this would not work if there were more than 
 ---
 
 
-We now see that the exclusions_bool and the extras_bool act as our indicators.
+#### We now see that the exclusions_bool and the extras_bool act as our indicators. 
+
 1 = TRUE
+>
 2 = FALSE
 
-From those indicators, we use the substring_index to extract the values from the left and right of the comma delimiter for those extras/exclusions that have a 1 value from the columns we created.
+#### From those indicators, we use the substring_index to extract the values from the left and right of the comma delimiter for those extras/exclusions that have a 1 value from the columns we created.
+
 In the instances where this applies, another set of columns are used to house the extracted values.
 
-Note: The following are part of the existing query, not as separate queries. 
->
+#### Note: The following are part of the existing query, not as separate queries. 
+
 The formatting is displayed in this manner to better showcase everything that is going on in 'chunks.'
 
 ** **
@@ -980,14 +985,14 @@ The formatting is displayed in this manner to better showcase everything that is
 | 10       | 1        | Meatlovers |                 |             | 2            |  6           | 1        |  4       |
 
 
-For whatever reason, db-fiddle does a terrible job with displaying the correct differentiation between 'null' and NULL, which explains the blank spaces, which I am not going back to fix everytime.
+#### For whatever reason, db-fiddle does a terrible job with displaying the correct differentiation between 'null' and NULL, which explains the blank spaces, which I am not going back to fix everytime. 
+
 The blank spaces should display null in all of them.
 
 ---
 
 
-What follows next in the series of nearly identical queries, is where we join the topping_id with the values that we extracted from the previous step.
-This will help us in determining the topping names associated with the topping_id.
+#### What follows next in the series of nearly identical queries, is where we join the topping_id with the values that we extracted from the previous step. This will help us in determining the topping names associated with the topping_id.
 
 ** **
     
@@ -1108,8 +1113,9 @@ This will help us in determining the topping names associated with the topping_i
         ON pt.topping_id = base_extras
     ),
 
-    Here we are seeing whether any ingredients stack and assigning them a 2x through concatination.
-    
+#### Here we are seeing whether any ingredients stack and assigning them a 2x through concatination.
+
+** **
     abc_exc_ext AS (
     SELECT 
     	order_id, 
@@ -1154,17 +1160,17 @@ This will help us in determining the topping names associated with the topping_i
 
 ---
 
-This is the final product, where we remove all the excess columns into a summarized query.
+#### This is the final product, where we remove all the excess columns into a summarized query.
 
 ** **
     
     SELECT
     	order_id,
     	CASE
-            WHEN exclusions_list IS NOT NULL AND extras_list IS NULL THEN CONCAT(pizza_name, ' - ', ' |Exclude| ', exclusions_list)
-            WHEN extras_list IS NOT NULL AND exclusions_list IS NULL THEN CONCAT(pizza_name, ' - ', ' |Extras| ' , extras_list)
+		WHEN exclusions_list IS NOT NULL AND extras_list IS NULL THEN CONCAT(pizza_name, ' - ', ' |Exclude| ', exclusions_list)
+		WHEN extras_list IS NOT NULL AND exclusions_list IS NULL THEN CONCAT(pizza_name, ' - ', ' |Extras| ' , extras_list)
     		WHEN COALESCE(exclusions_list, extras_list) IS NULL THEN pizza_name
-            WHEN COALESCE(exclusions_list, extras_list) IS NOT NULL THEN CONCAT(pizza_name, ' - ', ' |Exclude| ', exclusions_list, ' |Extras| ', extras_list)
+		WHEN COALESCE(exclusions_list, extras_list) IS NOT NULL THEN CONCAT(pizza_name, ' - ', ' |Exclude| ', exclusions_list, ' |Extras| ', extras_list)
     	END AS pizza_type
     FROM abc_exc_ext;
 
@@ -1189,80 +1195,85 @@ This is the final product, where we remove all the excess columns into a summari
 
 #### 6. What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
 
+** **
+	WITH delivered_bool AS (
+	SELECT 
+		c.order_id,
+		c.pizza_id,
+		c.exclusions_cleaned,
+		c.extras_cleaned,
+		IF(LOCATE(',', exclusions_cleaned), TRUE, FALSE) AS exc_bool,
+		IF(LOCATE(',', extras_cleaned), TRUE, FALSE) AS ext_bool
+	FROM cust_orders c
+	LEFT JOIN runner_orders_post r 
+		ON c.order_id = r.order_id
+	WHERE duration_mins IS NOT NULL
+	),
 
-with delivered_bool as (
-select 
-	c.order_id,
-    c.pizza_id,
-    c.exclusions_cleaned,
-    c.extras_cleaned,
-    if(locate(',', exclusions_cleaned), TRUE, FALSE) as exc_bool,
-    if(locate(',', extras_cleaned), TRUE, FALSE) as ext_bool
-from cust_orders c
-left join runner_orders_post r on c.order_id = r.order_id
-where duration_mins is not null
-),
+	exc_ext_list AS (
+	SELECT
+		order_id,
+		pizza_id,
+		CASE
+			WHEN exc_bool = 0 THEN exclusions_cleaned
+		END AS base_exc,
+		CASE
+			WHEN ext_bool = 0 THEN extras_cleaned
+		END AS base_ext,
+		CASE
+			WHEN exc_bool = 1 THEN SUBSTRING_INDEX(exclusions_cleaned, ',', 1)
+		END AS exc_1,
+		CASE
+			WHEN exc_bool = 1 THEN SUBSTRING_INDEX(exclusions_cleaned, ',', -1)
+		END AS exc_2,
+		CASE
+			WHEN ext_bool = 1 THEN SUBSTRING_INDEX(extras_cleaned, ',', 1)
+		END AS ext_1,
+		CASE
+			WHEN ext_bool = 1 THEN SUBSTRING_INDEX(extras_cleaned, ',', -1)
+		END AS ext_2
+	FROM delivered_bool
+	    )
 
-exc_ext_list as (
-select
-	order_id,
-    pizza_id,
-	case
-		when exc_bool = 0 then exclusions_cleaned
-	end as base_exc,
-    case
-		when ext_bool = 0 then extras_cleaned
-	end as base_ext,
-    case
-		when exc_bool = 1 then substring_index(exclusions_cleaned, ',', 1)
-	end as exc_1,
-    case
-		when exc_bool = 1 then substring_index(exclusions_cleaned, ',', -1)
-	end as exc_2,
-    case
-		when ext_bool = 1 then substring_index(extras_cleaned, ',', 1)
-	end as ext_1,
-    case
-		when ext_bool = 1 then substring_index(extras_cleaned, ',', -1)
-	end as ext_2
-from delivered_bool
-    )
-
-select
-	order_id,
-	pizza_id,
-	base_exc,
-    base_ext,
-    exc_1,
-    exc_2,
-    ext_1,
-    ext_2
-from exc_ext_list;
+	SELECT
+		order_id,
+		pizza_id,
+		base_exc,
+		base_ext,
+		exc_1,
+		exc_2,
+		ext_1,
+		ext_2
+	FROM exc_ext_list;
 
 
-with topping_list as (
- select 
-	cr.pizza_id,
-    cr.toppings,
-    pt.topping_name
-from  clean_pizza_recipes cr
-left join pizza_toppings pt on cr.toppings = pt.topping_id
-),
+	WITH topping_list AS (
+	SELECT
+		cr.pizza_id,
+		cr.toppings,
+		pt.topping_name
+	FROM clean_pizza_recipes cr
+	LEFT JOIN pizza_toppings pt 
+		ON cr.toppings = pt.topping_id
+	),
 
-pizza_counter as (
-select
-	c.order_id,
-	c.pizza_id,
-    count(c.pizza_id) as pizza_count
-from cust_orders c
-group by c.pizza_id
-)
+	pizza_counter AS (
+	SELECT
+		c.order_id,
+		c.pizza_id,
+		COUNT(c.pizza_id) AS pizza_count
+	FROM cust_orders c
+	GROUP BY c.pizza_id
+	)
 
-select topping_name, count(topping_name)*pizza_count as total_topping_count
-from topping_list
-inner join pizza_counter on topping_list.pizza_id = pizza_counter.pizza_id
-group by topping_name
-order by total_topping_count desc
+	SELECT 
+		topping_name, 
+		COUNT(topping_name) X pizza_count AS total_topping_count
+	FROM topping_list
+	INNER JOIN pizza_counter 
+		ON topping_list.pizza_id = pizza_counter.pizza_id
+	GROUP BY topping_name
+	ORDER BY total_topping_count DESC
 
 
 
@@ -1273,9 +1284,9 @@ order by total_topping_count desc
 **Query #1**
 
     SELECT
-    	SUM(CASE
-    	    WHEN pizza_id = 1 THEN 12
-    		WHEN pizza_id = 2 THEN 10
+	SUM(CASE
+		WHEN pizza_id = 1 THEN 12
+		WHEN pizza_id = 2 THEN 10
     	END) AS pizza_cost
     FROM cust_orders;
 
@@ -1300,7 +1311,7 @@ We also use a case statement that reflects the standard costs of a meat lover an
         IF(LOCATE(',', extras_cleaned), TRUE, FALSE) AS ex_bool,
         CASE
     		WHEN pizza_id = 1 THEN 12
-            WHEN pizza_id = 2 THEN 10
+            	WHEN pizza_id = 2 THEN 10
     	END AS base_pizza_cost
     FROM cust_orders
     ),
@@ -1326,7 +1337,7 @@ We also use a case statement that reflects the standard costs of a meat lover an
 
 ---
 
-Again, we use the 1 values generated from the previous query to extract the values to the left and right of the comma delimiter to a separate column.
+#### Again, we use the 1 values generated from the previous query to extract the values to the left and right of the comma delimiter to a separate column.
 
 ** **
 
@@ -1339,8 +1350,8 @@ Again, we use the 1 values generated from the previous query to extract the valu
     	END AS base_extras_cleaned,
         CASE
     		WHEN ex_bool = 1 THEN SUBSTRING_INDEX(extras_cleaned, ',', 1)
-    	END ASex_1,
-        case
+    	END AS ex_1,
+        CASE
     		WHEN ex_bool = 1 THEN SUBSTRING_INDEX(extras_cleaned, ',', -1)
         END AS ex_2
     FROM ex_bool_list
@@ -1365,15 +1376,16 @@ Again, we use the 1 values generated from the previous query to extract the valu
 
 ---
 
-At this point, we accumulate all the separated values to the associated standard pizza costs.
+#### At this point, we accumulate all the separated values to the associated standard pizza costs.
 
+** **
     total_cost_list AS (
     SELECT
     	order_id,
         CASE
-    		WHEN COALESCE(base_extras_cleaned, ex_1, ex_2) IS NULL THEN base_pizza_cost
-            WHEN base_extras_cleaned IS NOT NULL AND COALESCE(ex_1, ex_2) IS NULL THEN 1 + base_pizza_cost
-            WHEN base_extras_cleaned IS NULL AND COALESCE(ex_1, ex_2) IS NOT NULL THEN 2 + base_pizza_cost
+		WHEN COALESCE(base_extras_cleaned, ex_1, ex_2) IS NULL THEN base_pizza_cost
+		WHEN base_extras_cleaned IS NOT NULL AND COALESCE(ex_1, ex_2) IS NULL THEN 1 + base_pizza_cost
+		WHEN base_extras_cleaned IS NULL AND COALESCE(ex_1, ex_2) IS NOT NULL THEN 2 + base_pizza_cost
     	END AS total_pizza_cost
     FROM ext_list
     )
@@ -1397,7 +1409,7 @@ At this point, we accumulate all the separated values to the associated standard
 
 ---
 
-Aggregate the sum of total pizza costs in each row.
+#### Aggregate the sum of total pizza costs in each row.
 
 ** **
 
@@ -1482,7 +1494,7 @@ We use the first part from the answer in question 1.
 
 ---
 
-When a distance_km is labeled as null, it means that the delivery was cancelled, so we identify the orders that weren't cancelled and multiply it by 0.30 per the question.
+#### When a distance_km is labeled as null, it means that the delivery was cancelled, so we identify the orders that weren't cancelled and multiply it by 0.30 per the question.
 
 ** **
     runner_cost_list AS (
@@ -1508,7 +1520,7 @@ When a distance_km is labeled as null, it means that the delivery was cancelled,
 
 ---
 
-Here is the total sum of the runner costs.
+#### Here is the total sum of the runner costs.
 
 ** **
     runner_cost_total AS (
@@ -1522,7 +1534,7 @@ Here is the total sum of the runner costs.
 
 ---
 
-We then subtract the pizza_costs (which represent the profits) with the previous total query to account for the runner expenses, to get the true profit.
+#### We then subtract the pizza_costs (which represent the profits) with the previous total query to account for the runner expenses, to get the true profit.
 
 ** **
     SELECT
