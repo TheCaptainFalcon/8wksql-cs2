@@ -162,7 +162,7 @@ In this table, we remove all the blank spaces and replace all stringed (null/NaN
 		END AS exclusions_cleaned,
 		CASE
 			WHEN extras = '' THEN null
-			WHEN extras = 'NaN' THEN null
+			WHEN extras = 'null' THEN null
 		ELSE extras
 		END AS extras_cleaned,
 		order_time
@@ -469,7 +469,7 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
         END AS pizza_change_count,
         CASE
             WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned IS NULL THEN 1
-            WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned = 'NaN' THEN 1
+            WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned = 'null' THEN 1
             ELSE 0
         END AS pizza_no_change_count
     FROM cust_orders co
