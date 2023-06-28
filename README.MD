@@ -610,19 +610,18 @@ Normally, the answer would be 2, but because the question specified 'delivered',
 
 **Query #2**
 
-DROP TABLE IF EXISTS dist_time;
-CREATE TEMPORARY TABLE dist_time
-	SELECT DISTINCT order_time AS dist_order_time, pick_up_time AS dist_pick_up_time, runner_id
+    DROP TABLE IF EXISTS dist_time;
+    CREATE TEMPORARY TABLE dist_time
+        SELECT DISTINCT order_time AS dist_order_time, pick_up_time AS dist_pick_up_time, runner_id
     FROM cust_orders c
-LEFT JOIN runner_orders_post r
-	ON c.order_id = r.order_id
-    WHERE pick_up_time is not NULL;
-    
-SELECT
-    runner_id,
-    AVG(MINUTE(TIMEDIFF(dist_pick_up_time, dist_order_time))) AS time_mins
-FROM dist_time
-GROUP BY runner_id;
+        LEFT JOIN runner_orders_post r
+	    ON c.order_id = r.order_id
+       WHERE pick_up_time is not NULL;
+   SELECT
+        runner_id,
+        AVG(MINUTE(TIMEDIFF(dist_pick_up_time, dist_order_time))) AS time_mins
+    FROM dist_time
+    GROUP BY runner_id;
 
 
 
