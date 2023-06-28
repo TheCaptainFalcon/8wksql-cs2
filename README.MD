@@ -162,7 +162,7 @@ In this table, we remove all the blank spaces and replace all stringed (null/NaN
 		END AS exclusions_cleaned,
 		CASE
 			WHEN extras = '' THEN null
-			WHEN extras = 'NaN' THEN null
+			WHEN extras = 'null' THEN null
 		ELSE extras
 		END AS extras_cleaned,
 		order_time
@@ -469,7 +469,6 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
         END AS pizza_change_count,
         CASE
             WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned IS NULL THEN 1
-            WHEN co.exclusions_cleaned IS NULL AND co.extras_cleaned = 'NaN' THEN 1
             ELSE 0
         END AS pizza_no_change_count
     FROM cust_orders co
@@ -488,9 +487,9 @@ https://dbdiagram.io/d/5f3e085ccf48a141ff558487/?utm_source=dbdiagram_embed&utm_
 | customer_id | total_pizzas_with_changes | total_pizzas_without_changes |
 | ----------- | ------------------------- | ---------------------------- |
 | 101         | 0                         | 2                            |
-| 102         | 1                         | 2                            |
+| 102         | 0                         | 3                            |
 | 103         | 3                         | 0                            |
-| 104         | 3                         | 0                            |
+| 104         | 2                         | 1                            |
 | 105         | 1                         | 0                            |
 
 ---
@@ -611,18 +610,26 @@ Normally, the answer would be 2, but because the question specified 'delivered',
 
 **Query #2**
 
-    SELECT
-        r.runner_id,
-        AVG(MINUTE(TIMEDIFF(r.pick_up_time, c.order_time))) AS time_mins
+    DROP TABLE IF EXISTS dist_time;
+    CREATE TEMPORARY TABLE dist_time
+        SELECT DISTINCT order_time AS dist_order_time, pick_up_time AS dist_pick_up_time, runner_id
     FROM cust_orders c
-    LEFT JOIN runner_orders_post r
-    	ON c.order_id = r.order_id
-    GROUP BY r.runner_id;
+        LEFT JOIN runner_orders_post r
+	    ON c.order_id = r.order_id
+       WHERE pick_up_time is not NULL;
+
+    SELECT
+    runner_id,
+        AVG(MINUTE(TIMEDIFF(dist_pick_up_time, dist_order_time))) AS time_mins
+    FROM dist_time
+    GROUP BY runner_id;
+
+
 
 | runner_id | time_mins |
 | --------- | --------- |
-| 1         | 15.3333   |
-| 2         | 23.4000   |
+| 1         | 14.0000   |
+| 2         | 19.6667   |
 | 3         | 10.0000   |
 
 Note: TIMEDIFF(later time, earlier time)
