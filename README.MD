@@ -617,8 +617,9 @@ Normally, the answer would be 2, but because the question specified 'delivered',
         LEFT JOIN runner_orders_post r
 	    ON c.order_id = r.order_id
        WHERE pick_up_time is not NULL;
-   SELECT
-        runner_id,
+
+    SELECT
+    runner_id,
         AVG(MINUTE(TIMEDIFF(dist_pick_up_time, dist_order_time))) AS time_mins
     FROM dist_time
     GROUP BY runner_id;
